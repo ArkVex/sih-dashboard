@@ -97,7 +97,7 @@
       <span><b style="background:var(--series-4)"></b>Raw model</span>
     </div>
     <div class="chartbox">
-      <canvas id="speedChart" height="260"></canvas>
+      <canvas id="speedChart" data-h="260"></canvas>
       <div class="tip" id="speedTip"></div>
     </div>
   </div>
@@ -110,7 +110,7 @@
       <span><b style="background:var(--dr)"></b>Engine (dead-reckoning)</span>
       <span><b style="background:var(--text-muted)"></b>Engine (GNSS-aided)</span>
     </div>
-    <canvas id="trailChart" height="360"></canvas>
+    <canvas id="trailChart" data-h="360"></canvas>
   </div>
 
   <div class="card">
@@ -183,8 +183,10 @@ function renderTiles(){
 }
 
 function prepCanvas(cv){
+  // design height lives in data-h (immutable) — reading the height attribute back after
+  // writing cv.height = h*dpr compounded the scale on every refresh and stretched the page
   const dpr = Math.min(devicePixelRatio||1,2);
-  const w = cv.clientWidth, h = cv.getAttribute("height")*1;
+  const w = cv.clientWidth, h = cv.dataset.h*1;
   cv.width = w*dpr; cv.height = h*dpr; cv.style.height = h+"px";
   const ctx = cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
   return [ctx,w,h];
