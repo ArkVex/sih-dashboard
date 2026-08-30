@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIH26168 Telemetry</title>
+<style>
+  .viz-root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --surface-2:#f1f0ee;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#8a887f;
+    --grid:#e4e2de; --stroke:#d8d6d1;
+    --series-1:#2a78d6;   /* GNSS truth */
+    --series-2:#eb6834;   /* published speed */
+    --series-4:#eda100;   /* raw model */
+    --dr:#eb6834; --gnssline:#2a78d6;
+    --good:#008300; --warn:#eda100; --crit:#c8102e;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])) .viz-root{
+      color-scheme: dark;
+      --surface-1:#1a1a19; --surface-2:#232322;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8a887f;
+      --grid:#31312f; --stroke:#3c3b38;
+      --series-1:#3987e5; --series-2:#d95926; --series-4:#c98500;
+      --dr:#d95926; --gnssline:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] .viz-root{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --surface-2:#232322;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8a887f;
+    --grid:#31312f; --stroke:#3c3b38;
+    --series-1:#3987e5; --series-2:#d95926; --series-4:#c98500;
+    --dr:#d95926; --gnssline:#3987e5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .viz-root{background:var(--surface-1);color:var(--text-primary);min-height:100vh;padding:20px}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  h1{font-size:17px;margin:0;font-weight:650}
+  .sub{color:var(--text-muted);font-size:12px}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  select,button.tbtn{font:inherit;font-size:13px;padding:7px 10px;border-radius:8px;
+    border:1px solid var(--stroke);background:var(--surface-2);color:var(--text-primary)}
+  .live{font-size:12px;color:var(--text-secondary);align-self:center}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+  .tile{background:var(--surface-2);border:1px solid var(--stroke);border-radius:10px;padding:10px 12px}
+  .tile .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-muted)}
+  .tile .v{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:3px}
+  .tile .u{font-size:12px;color:var(--text-secondary);font-weight:400}
+  .card{background:var(--surface-2);border:1px solid var(--stroke);border-radius:12px;
+    padding:14px;margin-bottom:14px}
+  .card h2{font-size:13px;margin:0 0 4px;font-weight:600}
+  .card .note{font-size:11.5px;color:var(--text-muted);margin:0 0 10px}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--text-secondary);margin-bottom:8px;flex-wrap:wrap}
+  .legend b{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+  canvas{width:100%;display:block}
+  .chartbox{position:relative}
+  .tip{position:absolute;pointer-events:none;background:var(--surface-1);border:1px solid var(--stroke);
+    border-radius:8px;padding:6px 9px;font-size:11.5px;color:var(--text-primary);display:none;
+    box-shadow:0 2px 10px rgba(0,0,0,.18);white-space:nowrap;z-index:5}
+  .tip .t{color:var(--text-muted)}
+  details{margin-top:6px}
+  summary{cursor:pointer;font-size:12px;color:var(--text-secondary)}
+  table{border-collapse:collapse;font-size:11.5px;width:100%;margin-top:8px}
+  th,td{border-bottom:1px solid var(--grid);padding:4px 8px;text-align:right;
+    font-variant-numeric:tabular-nums;color:var(--text-secondary)}
+  th{color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.06em}
+  td:first-child,th:first-child{text-align:left}
+  .empty{color:var(--text-muted);padding:40px;text-align:center;font-size:13px}
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+  <header>
+    <h1>SIH26168 — Fleet Telemetry</h1>
+    <span class="sub">every connected device · uploaded live from the app (0.5 Hz sample)</span>
+  </header>
+
+  <div class="filters">
+    <select id="device"></select>
+    <select id="session"></select>
+    <button class="tbtn" id="refresh">Refresh</button>
+    <span class="live" id="status">loading…</span>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Speed — model vs GPS truth</h2>
+    <p class="note">Where the orange leaves the blue, the model is wrong. Amber = raw model before blending/guards.</p>
+    <div class="legend">
+      <span><b style="background:var(--series-1)"></b>GNSS (truth)</span>
+      <span><b style="background:var(--series-2)"></b>Published</span>
+      <span><b style="background:var(--series-4)"></b>Raw model</span>
+    </div>
+    <div class="chartbox">
+      <canvas id="speedChart" height="260"></canvas>
+      <div class="tip" id="speedTip"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Trail — engine vs GPS</h2>
+    <p class="note">Blue = GPS fixes. Orange = engine position while dead-reckoning. Divergence = blackout error.</p>
+    <div class="legend">
+      <span><b style="background:var(--gnssline)"></b>GPS track</span>
+      <span><b style="background:var(--dr)"></b>Engine (dead-reckoning)</span>
+      <span><b style="background:var(--text-muted)"></b>Engine (GNSS-aided)</span>
+    </div>
+    <canvas id="trailChart" height="360"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Raw rows</h2>
+    <details><summary>Show latest 50 rows (table view)</summary>
+      <div style="overflow-x:auto"><table id="rows"></table></div>
+    </details>
+  </div>
+</div></div>
+
+<script>
+const URL_ = "https://brkfxezmwdhufpblnowp.supabase.co/rest/v1/telemetry";
+const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJya2Z4ZXptd2RodWZwYmxub3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDExNzYsImV4cCI6MjEwMzY3NzE3Nn0.FmlckIWMuHBmve5_gl0TXMlbJ2WdR3KAqBXV8IgPZx8";
+const H = {apikey: KEY, Authorization: "Bearer " + KEY};
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(v).trim();
+
+async function q(params){
+  const r = await fetch(URL_ + "?" + params, {headers: H});
+  if(!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+let rows = [];
+
+async function loadDevices(){
+  try{
+    const d = await q("select=device_id&order=id.desc&limit=2000");
+    const devs = [...new Set(d.map(x=>x.device_id))];
+    $("device").innerHTML = devs.map(x=>`<option>${x}</option>`).join("") || "<option>no devices yet</option>";
+    if(devs.length) await loadSessions();
+    else $("status").textContent = "no data yet — drive with the app running";
+  }catch(e){ $("status").textContent = "error: " + e.message + " (table created?)"; }
+}
+
+async function loadSessions(){
+  const dev = $("device").value;
+  const d = await q(`select=session_id&device_id=eq.${encodeURIComponent(dev)}&order=id.desc&limit=2000`);
+  const ses = [...new Set(d.map(x=>x.session_id))];
+  $("session").innerHTML = ses.map(x=>`<option>${x}</option>`).join("");
+  await loadData();
+}
+
+async function loadData(){
+  const dev = $("device").value, ses = $("session").value;
+  if(!dev || !ses) return;
+  rows = await q(`select=*&device_id=eq.${encodeURIComponent(dev)}&session_id=eq.${encodeURIComponent(ses)}&order=t_nanos.asc&limit=5000`);
+  $("status").textContent = rows.length + " rows · updated " + new Date().toLocaleTimeString();
+  render();
+}
+
+function render(){
+  renderTiles(); renderSpeed(); renderTrail(); renderTable();
+}
+
+function renderTiles(){
+  if(!rows.length){ $("tiles").innerHTML=""; return; }
+  const durS = (rows.at(-1).t_nanos - rows[0].t_nanos)/1e9;
+  const drPct = 100*rows.filter(r=>r.mode==="DEAD_RECKONING").length/rows.length;
+  const vmax = Math.max(...rows.map(r=>r.v_out??0))*3.6;
+  const pairs = rows.filter(r=>r.v_gnss>3 && r.v_out!=null);
+  const mae = pairs.length? pairs.reduce((a,r)=>a+Math.abs(r.v_out-r.v_gnss),0)/pairs.length : NaN;
+  const t = (k,v,u)=>`<div class="tile"><div class="k">${k}</div><div class="v">${v} <span class="u">${u||""}</span></div></div>`;
+  $("tiles").innerHTML =
+    t("Duration",(durS/60).toFixed(1),"min") +
+    t("Max speed",vmax.toFixed(0),"km/h") +
+    t("Dead-reckoning",drPct.toFixed(0),"% of time") +
+    t("Speed MAE",isNaN(mae)?"–":mae.toFixed(2),"m/s vs GPS") +
+    t("Rows",rows.length,"");
+}
+
+function prepCanvas(cv){
+  const dpr = Math.min(devicePixelRatio||1,2);
+  const w = cv.clientWidth, h = cv.getAttribute("height")*1;
+  cv.width = w*dpr; cv.height = h*dpr; cv.style.height = h+"px";
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return [ctx,w,h];
+}
+
+let speedGeom = null;
+function renderSpeed(){
+  const cv = $("speedChart"); const [ctx,w,h] = prepCanvas(cv);
+  ctx.clearRect(0,0,w,h);
+  if(!rows.length) return;
+  const padL=44,padR=10,padT=10,padB=22;
+  const t0=rows[0].t_nanos, t1=rows.at(-1).t_nanos||t0+1;
+  const X=t=>padL+(t-t0)/(t1-t0)*(w-padL-padR);
+  const vs=rows.flatMap(r=>[r.v_gnss,r.v_out,r.v_model]).filter(v=>v!=null&&isFinite(v));
+  const vmax=Math.max(5, ...vs)*1.08;
+  const Y=v=>h-padB-(v/vmax)*(h-padT-padB);
+  // grid + y labels
+  ctx.strokeStyle=css("--grid"); ctx.fillStyle=css("--text-muted");
+  ctx.font="10px ui-sans-serif,system-ui"; ctx.lineWidth=1; ctx.textAlign="right";
+  for(let i=0;i<=4;i++){ const v=vmax*i/4, y=Y(v);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillText((v*3.6).toFixed(0)+" km/h", padL-6, y+3); }
+  // series
+  const line=(key,color)=>{ ctx.strokeStyle=color; ctx.lineWidth=2;
+    ctx.lineJoin="round"; ctx.beginPath(); let started=false;
+    rows.forEach(r=>{ const v=r[key]; if(v==null||!isFinite(v)){started=false;return;}
+      const x=X(r.t_nanos),y=Y(v); started?ctx.lineTo(x,y):ctx.moveTo(x,y); started=true; });
+    ctx.stroke(); };
+  line("v_model",css("--series-4"));
+  line("v_gnss",css("--series-1"));
+  line("v_out",css("--series-2"));
+  // DR shading along x
+  ctx.fillStyle=css("--dr"); ctx.globalAlpha=.12;
+  rows.forEach((r,i)=>{ if(r.mode==="DEAD_RECKONING"){ const x=X(r.t_nanos);
+    const x2=i+1<rows.length?X(rows[i+1].t_nanos):x+2; ctx.fillRect(x,padT,Math.max(x2-x,1),h-padT-padB); }});
+  ctx.globalAlpha=1;
+  speedGeom={X,Y,padL,padR,w,h,t0,t1};
+}
+
+$("speedChart").addEventListener("mousemove",e=>{
+  if(!speedGeom||!rows.length) return;
+  const r0=$("speedChart").getBoundingClientRect();
+  const mx=e.clientX-r0.left;
+  // nearest row by x
+  let best=null,bd=1e18;
+  rows.forEach(r=>{ const d=Math.abs(speedGeom.X(r.t_nanos)-mx); if(d<bd){bd=d;best=r;} });
+  const tip=$("speedTip");
+  if(!best||bd>30){ tip.style.display="none"; return; }
+  const ts=((best.t_nanos-speedGeom.t0)/1e9).toFixed(1);
+  tip.innerHTML=`<span class="t">t+${ts}s · ${best.mode}</span><br>`+
+    `GNSS ${(best.v_gnss*3.6||0).toFixed(1)} · Out ${(best.v_out*3.6||0).toFixed(1)} · Model ${(best.v_model*3.6||0).toFixed(1)} km/h`;
+  tip.style.display="block";
+  tip.style.left=Math.min(mx+12, speedGeom.w-170)+"px";
+  tip.style.top="12px";
+});
+$("speedChart").addEventListener("mouseleave",()=>$("speedTip").style.display="none");
+
+function renderTrail(){
+  const cv=$("trailChart"); const [ctx,w,h]=prepCanvas(cv);
+  ctx.clearRect(0,0,w,h);
+  const pts=rows.filter(r=>r.lat&&r.lon);
+  if(!pts.length){ ctx.fillStyle=css("--text-muted"); ctx.font="12px ui-sans-serif";
+    ctx.fillText("no position data",20,30); return; }
+  const lats=pts.flatMap(r=>[r.lat,r.gnss_lat]).filter(v=>v),
+        lons=pts.flatMap(r=>[r.lon,r.gnss_lon]).filter(v=>v);
+  const la0=Math.min(...lats),la1=Math.max(...lats),lo0=Math.min(...lons),lo1=Math.max(...lons);
+  const pad=24, sc=Math.min((w-2*pad)/Math.max(lo1-lo0,1e-6),(h-2*pad)/Math.max(la1-la0,1e-6));
+  const X=lo=>pad+(lo-lo0)*sc, Y=la=>h-pad-(la-la0)*sc;
+  // GPS track
+  ctx.strokeStyle=css("--gnssline"); ctx.lineWidth=3; ctx.lineJoin="round"; ctx.beginPath();
+  let st=false; pts.forEach(r=>{ if(!r.gnss_lat){st=false;return;}
+    const x=X(r.gnss_lon),y=Y(r.gnss_lat); st?ctx.lineTo(x,y):ctx.moveTo(x,y); st=true; });
+  ctx.stroke();
+  // engine: grey while GNSS-aided, orange while DR (dashed to differ by pattern, not hue alone)
+  const seg=(filter,color,dash)=>{ ctx.strokeStyle=color; ctx.lineWidth=2.2; ctx.setLineDash(dash);
+    ctx.beginPath(); let s2=false;
+    pts.forEach(r=>{ if(!filter(r)){s2=false;return;}
+      const x=X(r.lon),y=Y(r.lat); s2?ctx.lineTo(x,y):ctx.moveTo(x,y); s2=true; });
+    ctx.stroke(); ctx.setLineDash([]); };
+  seg(r=>r.mode!=="DEAD_RECKONING",css("--text-muted"),[]);
+  seg(r=>r.mode==="DEAD_RECKONING",css("--dr"),[6,4]);
+  // start marker
+  ctx.fillStyle=css("--text-primary");
+  ctx.beginPath(); ctx.arc(X(pts[0].lon),Y(pts[0].lat),4,0,7); ctx.fill();
+}
+
+function renderTable(){
+  const cols=["ts","mode","v_gnss","v_out","v_model","dv","lambda","heading","sats","lat","lon"];
+  const last=rows.slice(-50).reverse();
+  $("rows").innerHTML="<tr>"+cols.map(c=>`<th>${c}</th>`).join("")+"</tr>"+
+    last.map(r=>"<tr>"+cols.map(c=>{
+      let v=r[c]; if(typeof v==="number") v=Math.abs(v)>1000?v.toFixed(5):v.toFixed(2);
+      if(c==="ts") v=(r.ts||"").slice(11,19);
+      return `<td>${v??"–"}</td>`;
+    }).join("")+"</tr>").join("");
+}
+
+$("device").onchange=loadSessions;
+$("session").onchange=loadData;
+$("refresh").onclick=loadDevices;
+setInterval(loadData, 10000);
+loadDevices();
+</script>
+</body>
+</html>
