@@ -115,7 +115,8 @@
 
   <div class="card">
     <h2>Raw rows</h2>
-    <details><summary>Show latest 50 rows (table view)</summary>
+    <details><summary>Show latest 500 rows (table view)</summary>
+      <button class="tbtn" id="dlcsv" style="margin-top:8px">Download full session CSV</button>
       <div style="overflow-x:auto"><table id="rows"></table></div>
     </details>
   </div>
@@ -275,7 +276,7 @@ function renderTrail(){
 
 function renderTable(){
   const cols=["ts","mode","v_gnss","v_out","v_model","dv","lambda","heading","sats","lat","lon"];
-  const last=rows.slice(-50).reverse();
+  const last=rows.slice(-500).reverse();
   $("rows").innerHTML="<tr>"+cols.map(c=>`<th>${c}</th>`).join("")+"</tr>"+
     last.map(r=>"<tr>"+cols.map(c=>{
       let v=r[c]; if(typeof v==="number") v=Math.abs(v)>1000?v.toFixed(5):v.toFixed(2);
@@ -287,6 +288,15 @@ function renderTable(){
 $("device").onchange=loadSessions;
 $("session").onchange=loadData;
 $("refresh").onclick=loadDevices;
+$("dlcsv").onclick=()=>{
+  if(!rows.length) return;
+  const cols=Object.keys(rows[0]);
+  const csv=[cols.join(",")].concat(rows.map(r=>cols.map(c=>r[c]??"").join(","))).join("\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download=`telemetry_${$("device").value}_${$("session").value}.csv`;
+  a.click();
+};
 setInterval(loadData, 10000);
 loadDevices();
 </script>
