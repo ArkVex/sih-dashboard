@@ -279,7 +279,7 @@ function renderTable(){
   $("rows").innerHTML="<tr>"+cols.map(c=>`<th>${c}</th>`).join("")+"</tr>"+
     last.map(r=>"<tr>"+cols.map(c=>{
       let v=r[c]; if(typeof v==="number") v=Math.abs(v)>1000?v.toFixed(5):v.toFixed(2);
-      if(c==="ts") v=(r.ts||"").slice(11,19);
+      if(c==="ts") v=r.ts?new Date(r.ts).toLocaleTimeString():"–";   // stored UTC, shown local
       return `<td>${v??"–"}</td>`;
     }).join("")+"</tr>").join("");
 }
